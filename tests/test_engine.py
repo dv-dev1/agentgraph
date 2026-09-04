@@ -6,7 +6,18 @@ tests and destroy the only thing this project proves.
 
 import pytest
 
-from agentgraph import END, START, Checkpointer, Graph, RecursionLimit, add, merge, replace
+from agentgraph import (
+    END,
+    START,
+    Checkpointer,
+    Graph,
+    NotPaused,
+    RecursionLimit,
+    add,
+    interrupt,
+    merge,
+    replace,
+)
 
 SCHEMA = {"facts": add, "step_name": replace, "value": replace}
 
@@ -92,9 +103,10 @@ def linear_graph(tmp_path):
 
 
 def test_a_linear_graph_runs_to_the_end(tmp_path):
-    final = linear_graph(tmp_path).invoke({"facts": []}, "t1")
-    assert final["facts"] == ["first", "second", "third"]
-    assert final["step_name"] == "third"
+    result = linear_graph(tmp_path).invoke({"facts": []}, "t1")
+    assert result["status"] == "done"
+    assert result["state"]["facts"] == ["first", "second", "third"]
+    assert result["state"]["step_name"] == "third"
 
 
 def test_one_row_per_step(tmp_path):
@@ -126,8 +138,8 @@ def test_a_conditional_edge_picks_the_target_at_run_time(tmp_path):
     graph.add_edge("big", END)
     graph.add_edge("small", END)
     graph.compile(checkpointer(tmp_path))
-    assert graph.invoke({"facts": [], "value": 9}, "t1")["facts"] == ["big"]
-    assert graph.invoke({"facts": [], "value": 2}, "t2")["facts"] == ["small"]
+    assert graph.invoke({"facts": [], "value": 9}, "t1")["state"]["facts"] == ["big"]
+    assert graph.invoke({"facts": [], "value": 2}, "t2")["state"]["facts"] == ["small"]
 
 
 def test_a_router_pointing_at_nothing_raises(tmp_path):
@@ -163,6 +175,106 @@ def test_the_ceiling_is_checked_before_running_the_node(tmp_path):
     assert len(runs) == 3
 
 
+# ---- pause and resume ----------------------------------------------------
+
+
+def approving_graph(store, log=None, ask_again=False):
+    """prepare -> approval (asks a human) -> act -> END."""
+    log = [] if log is None else log
+
+    def approval(state):
+        log.append("ran")
+        answer = interrupt("sign off?")
+        return {"facts": [f"answered {answer}"]}
+
+    def act(state):
+        if ask_again:
+            interrupt("and again?")
+        return {"facts": ["acted"]}
+
+    graph = Graph(SCHEMA)
+    graph.add_node("prepare", lambda s: {"facts": ["prepared"]})
+    graph.add_node("approval", approval)
+    graph.add_node("act", act)
+    graph.add_edge(START, "prepare")
+    graph.add_edge("prepare", "approval")
+    graph.add_edge("approval", "act")
+    graph.add_edge("act", END)
+    return graph.compile(store)
+
+
+def test_a_node_that_asks_for_a_human_pauses_the_graph(tmp_path):
+    result = approving_graph(checkpointer(tmp_path)).invoke({"facts": []}, "t1")
+    assert result["status"] == "paused"
+    assert result["interrupt"] == "sign off?"
+    assert result["state"]["facts"] == ["prepared"]  # the asking node did not land
+
+
+def test_the_paused_row_points_at_the_node_that_asked(tmp_path):
+    store = checkpointer(tmp_path)
+    approving_graph(store).invoke({"facts": []}, "t1")
+    row = store.load_latest("t1")
+    assert row["next_node"] == "approval"
+    assert row["interrupt"] == "sign off?"
+
+
+def test_a_brand_new_graph_resumes_from_the_file(tmp_path):
+    """The kill test. Nothing of the first run survives except the file."""
+    path = str(tmp_path / "test.db")
+    approving_graph(Checkpointer(path)).invoke({"facts": []}, "t1")
+
+    fresh = approving_graph(Checkpointer(path))  # different objects, same file
+    result = fresh.resume("t1", "approved")
+
+    assert result["status"] == "done"
+    assert result["state"]["facts"] == ["prepared", "answered approved", "acted"]
+
+
+def test_resuming_replaces_the_paused_row_instead_of_adding_one(tmp_path):
+    store = checkpointer(tmp_path)
+    graph = approving_graph(store)
+    graph.invoke({"facts": []}, "t1")
+    graph.resume("t1", "approved")
+    steps = store.conn.execute(
+        "SELECT step FROM checkpoints WHERE thread_id = 't1' ORDER BY step"
+    ).fetchall()
+    assert [r["step"] for r in steps] == [0, 1, 2]
+
+
+def test_resume_on_a_thread_that_is_not_paused_raises(tmp_path):
+    store = checkpointer(tmp_path)
+    graph = approving_graph(store)
+    graph.invoke({"facts": []}, "t1")
+    graph.resume("t1", "approved")
+    with pytest.raises(NotPaused, match="not paused"):
+        graph.resume("t1", "approved")
+
+
+def test_resume_on_an_unknown_thread_raises(tmp_path):
+    with pytest.raises(ValueError, match="unknown thread"):
+        approving_graph(checkpointer(tmp_path)).resume("nope", "approved")
+
+
+def test_everything_above_the_interrupt_runs_twice(tmp_path):
+    """The trap, pinned by a test so nobody 'fixes' it by accident."""
+    log = []
+    store = checkpointer(tmp_path)
+    graph = approving_graph(store, log)
+    graph.invoke({"facts": []}, "t1")
+    assert log == ["ran"]
+    graph.resume("t1", "approved")
+    assert log == ["ran", "ran"]
+
+
+def test_the_answer_does_not_leak_into_the_next_node(tmp_path):
+    store = checkpointer(tmp_path)
+    graph = approving_graph(store, ask_again=True)
+    graph.invoke({"facts": []}, "t1")
+    result = graph.resume("t1", "approved")
+    assert result["status"] == "paused"
+    assert result["interrupt"] == "and again?"
+
+
 # ---- checkpointer --------------------------------------------------------
 
 
@@ -175,6 +287,15 @@ def test_load_latest_returns_the_highest_step(tmp_path):
 
 def test_load_latest_of_an_unknown_thread_is_none(tmp_path):
     assert checkpointer(tmp_path).load_latest("nope") is None
+
+
+def test_list_paused_sees_a_thread_the_engine_actually_paused(tmp_path):
+    store = checkpointer(tmp_path)
+    approving_graph(store).invoke({"facts": [], "value": 1}, "t1")
+    paused = store.list_paused()
+    assert len(paused) == 1
+    assert paused[0]["thread_id"] == "t1"
+    assert paused[0]["interrupt"] == "sign off?"
 
 
 def test_list_paused_ignores_a_thread_that_already_resumed(tmp_path):
