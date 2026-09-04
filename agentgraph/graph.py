@@ -5,6 +5,7 @@ freezes and validates it, and only then can it run.
 """
 
 from .checkpoint import Checkpointer
+from .interrupt import MISSING, Interrupted, supply, withdraw
 from .state import merge
 
 START = "__start__"
@@ -13,6 +14,14 @@ END = "__end__"
 
 class RecursionLimit(RuntimeError):
     """The graph went past its step ceiling. Almost always a cycle with no exit."""
+
+
+class NotPaused(RuntimeError):
+    """resume() was called on a thread that is not waiting for anyone.
+
+    This is the guard against a double click: without it, answering twice runs
+    the approved node twice.
+    """
 
 
 class Graph:
@@ -83,19 +92,54 @@ class Graph:
             return target
         return self.edges[node]
 
-    def invoke(self, state: dict, thread_id: str) -> dict:
-        """Run from the start until END, saving every step."""
-        if not self._compiled:
-            raise RuntimeError("call compile() before invoke()")
+    def _call(self, node: str, state: dict, answer):
+        """Run one node, with the human's answer in scope if there is one."""
+        if answer is MISSING:
+            return self.nodes[node](state)
+        token = supply(answer)
+        try:
+            return self.nodes[node](state)
+        finally:
+            withdraw(token)
 
-        node = self.edges[START]
-        step = 0
+    def _run(self, state: dict, thread_id: str, node: str, step: int, answer=MISSING) -> dict:
+        """The loop. Shared by invoke and resume, which differ only in where they start."""
         while node != END:
             if step >= self.limit:
                 raise RecursionLimit(f"exceeded {self.limit} steps")
-            delta = self.nodes[node](state)
+            try:
+                delta = self._call(node, state, answer)
+            except Interrupted as pause:
+                # Save the state as it was *before* the node ran, and the node
+                # itself as next_node: resuming re-runs it from its first line.
+                self.checkpointer.save(thread_id, step, state, node, pause.payload)
+                return {
+                    "status": "paused",
+                    "thread_id": thread_id,
+                    "step": step,
+                    "state": state,
+                    "interrupt": pause.payload,
+                }
+            answer = MISSING  # the answer belongs to the node that asked for it
             state = merge(state, delta, self.schema)
             node = self._next(node, state)
             self.checkpointer.save(thread_id, step, state, node)
             step += 1
-        return state
+        return {"status": "done", "thread_id": thread_id, "state": state}
+
+    def invoke(self, state: dict, thread_id: str) -> dict:
+        """Run from the start until END or until a node asks for a human."""
+        if not self._compiled:
+            raise RuntimeError("call compile() before invoke()")
+        return self._run(state, thread_id, self.edges[START], 0)
+
+    def resume(self, thread_id: str, answer) -> dict:
+        """Carry on a paused thread. Nothing of the first run is still in memory."""
+        if not self._compiled:
+            raise RuntimeError("call compile() before resume()")
+        row = self.checkpointer.load_latest(thread_id)
+        if row is None:
+            raise ValueError(f"unknown thread {thread_id!r}")
+        if row["interrupt"] is None:
+            raise NotPaused(f"thread {thread_id} is not paused")
+        return self._run(row["state"], thread_id, row["next_node"], row["step"], answer)
