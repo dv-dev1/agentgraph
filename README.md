@@ -1,9 +1,25 @@
+<div align="center">
+
 # agentgraph
 
-[![CI](https://github.com/dv-dev1/agentgraph/actions/workflows/ci.yml/badge.svg)](https://github.com/dv-dev1/agentgraph/actions/workflows/ci.yml)
-
-A small agent graph engine with checkpointing and human-in-the-loop.
+**A small agent graph engine with checkpointing and human-in-the-loop.**<br />
 No dependencies. Run it, kill the process, resume it.
+
+[![CI](https://github.com/dv-dev1/agentgraph/actions/workflows/ci.yml/badge.svg)](https://github.com/dv-dev1/agentgraph/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white)
+![Dependencies](https://img.shields.io/badge/engine_dependencies-0-2ea44f)
+![Engine](https://img.shields.io/badge/engine-279_lines-blue)
+[![License](https://img.shields.io/github/license/dv-dev1/agentgraph)](LICENSE)
+
+[Why](#why) · [See it](#see-it) · [Approval screen](#the-approval-screen) · [Run it](#run-it) · [How it works](#how-it-works) · [The trap](#the-trap) · [Limits](#what-this-is-not)
+
+<img src="docs/inbox-pending.png" alt="The approval inbox with one pending credit application" width="820" />
+
+</div>
+
+---
+
+## Why
 
 An agent that only answers questions is harmless. An agent that *acts* — moves
 money, deletes a file, sends mail — does things you cannot undo, and nobody puts
@@ -12,9 +28,40 @@ program: if it stops to wait for a person, you are holding a process open for
 hours or days. Nobody does that.
 
 So the state has to leave memory and go to disk, and the agent has to be able to
-die and come back. That is the whole idea, and it is what this repository is.
+die and come back. **That is the whole idea, and it is what this repository is.**
+
+```mermaid
+flowchart LR
+    A[run] --> B[node]
+    B --> C[(SQLite<br/>one row per step)]
+    C --> D{interrupt?}
+    D -- no --> B
+    D -- yes --> E([process exits])
+    E -. hours or days later .-> F[resume thread answer]
+    F --> C
+    C --> B
+```
+
+> Between `run` and `resume` nothing is alive. No daemon, no waiting thread, no
+> object in memory. The only link is a SQLite file.
+
+---
 
 ## See it
+
+A credit application. The graph fetches the proposal, scores it, assesses it, and stops
+when the amount is above the limit.
+
+```mermaid
+flowchart LR
+    fetch_application --> score --> assess
+    assess -- income not verified --> fetch_income --> assess
+    assess -- verified --> check_threshold
+    check_threshold -- "above limit" --> human_approval --> disburse
+    check_threshold -- "within limit" --> disburse
+```
+
+**1. Run it. The agent pauses and the process ends.**
 
 ```
 $ python -m demo.cli run --application A-1042
@@ -27,7 +74,7 @@ $ python -m demo.cli run --application A-1042
 PAUSED  thread=f3a1  waiting: approve credit of R$ 40.000,00 for customer 88231?
 ```
 
-The process is gone. Close the terminal, reboot, come back tomorrow:
+**2. The process is gone. Close the terminal, reboot, come back tomorrow.**
 
 ```
 $ python -m demo.cli resume f3a1 approved
@@ -36,15 +83,12 @@ $ python -m demo.cli resume f3a1 approved
 OK
 ```
 
-Between those two commands nothing is alive. No daemon, no waiting thread, no
-object in memory. The only link is a SQLite file.
+> **Note that `[assess]` runs twice in the first command.** The graph has a cycle:
+> `assess` decided it could not judge without a verified income, routed to
+> `fetch_income`, and came back. That is the difference between a graph and a pipeline.
 
-Note that `[assess]` runs twice in the first command. The graph has a cycle:
-`assess` decided it could not judge without a verified income, routed to
-`fetch_income`, and came back. That is the difference between a graph and a
-pipeline.
-
-Under the limit, nobody is asked:
+<details>
+<summary><b>Under the limit, nobody is asked</b></summary>
 
 ```
 $ python -m demo.cli run --application A-2001
@@ -52,6 +96,10 @@ $ python -m demo.cli run --application A-2001
 [check_threshold]   3000.00 within the 5000.00 limit
 [disburse]          credit of R$ 3.000,00 released
 ```
+
+</details>
+
+---
 
 ## The approval screen
 
@@ -64,20 +112,27 @@ $ python -m demo.inbox
 approvals on http://127.0.0.1:8000
 ```
 
-![The approval inbox with one pending credit application](docs/inbox-pending.png)
+<table>
+<tr>
+<td width="50%"><img src="docs/inbox-pending.png" alt="The approval inbox with one pending credit application" /></td>
+<td width="50%"><img src="docs/inbox-empty.png" alt="The inbox after the approval, with nothing left waiting" /></td>
+</tr>
+<tr>
+<td align="center"><sub>One thread waiting</sub></td>
+<td align="center"><sub>After the approval, nothing left</sub></td>
+</tr>
+</table>
 
 Every thread the engine paused shows up with what it takes to decide and nothing
 else: the amount, the score and verified income, the assessment the agent
 reached, and its recommendation. Only the conclusion, not the whole trail —
 `assess` also produced "income not verified" on its first pass, and showing that
-next to the verified figure would slow the reader down instead of helping. Approving calls
-`resume(thread_id, "approved")`, exactly what the CLI calls.
+next to the verified figure would slow the reader down instead of helping.
+Approving calls `resume(thread_id, "approved")`, exactly what the CLI calls.
 
 It answers with `303 See Other` rather than a page, so reloading in the browser
-cannot approve twice. Served by `http.server`, HTML built in Python: no
-framework, no build step, no JavaScript.
-
-![The inbox after the approval, with nothing left waiting](docs/inbox-empty.png)
+cannot approve twice. Served by `http.server`, HTML built in Python: **no
+framework, no build step, no JavaScript.**
 
 The engine has finished the thread by the time the page comes back:
 
@@ -86,11 +141,13 @@ $ python -m demo.cli status f3a1
 DONE       released
 ```
 
+---
+
 ## Run it
 
 Python 3.9 or newer.
 
-```
+```bash
 git clone https://github.com/dv-dev1/agentgraph && cd agentgraph
 pip install -e ".[dev]"
 python -m demo.cli run --application A-1042
@@ -104,19 +161,21 @@ The test suite needs no API key, no network and no account. Four of the tests
 drive the inbox in a real browser, proving the button submits and not just that
 the endpoint answers. They are skipped unless Playwright is installed:
 
-```
+```bash
 pip install -e ".[browser]" && playwright install chromium
 ```
 
-The engine itself stays clean. `agentgraph/` imports only `sqlite3`, `json`,
+The README's promise, checkable. `agentgraph/` imports only `sqlite3`, `json`,
 `contextvars`, `datetime` and `typing`:
 
-```
+```bash
 grep -rn "^import \|^from " agentgraph/ \
   | grep -v "sqlite3\|json\|contextvars\|datetime\|typing\|agentgraph"
 ```
 
 That prints nothing.
+
+---
 
 ## How it works
 
@@ -129,7 +188,7 @@ Four files, 279 lines counting docstrings.
 | `agentgraph/graph.py` | assembly, validation, the execution loop, `resume` |
 | `agentgraph/interrupt.py` | `interrupt()` and the exception behind it |
 
-A node is a plain function. It never touches the database and never learns that
+**A node is a plain function.** It never touches the database and never learns that
 it was paused:
 
 ```python
@@ -152,7 +211,7 @@ A field the node did not return stays as it was. A field that is not in the
 schema raises, so a typo in a return value fails at the merge instead of
 becoming a ghost field three steps later.
 
-Asking a human is one call:
+**Asking a human is one call:**
 
 ```python
 def human_approval(state: dict) -> dict:
@@ -164,10 +223,30 @@ def human_approval(state: dict) -> dict:
 and the question to SQLite, and returns. On `resume`, the same call returns the
 human's answer instead.
 
+```mermaid
+sequenceDiagram
+    participant H as Human
+    participant E as Engine
+    participant N as human_approval
+    participant S as SQLite
+    E->>N: first pass
+    N-->>E: interrupt raises
+    E->>S: save state + question
+    E-->>H: PAUSED thread=f3a1
+    Note over E,S: process exits
+    H->>E: resume f3a1 approved
+    E->>S: load state
+    E->>N: run again from line 1
+    N-->>E: interrupt returns "approved"
+```
+
+---
+
 ## The trap
 
-Resuming does not continue from the line after `interrupt`. It runs the node
-again **from its first line**. Everything above the call happens twice.
+> [!WARNING]
+> Resuming does not continue from the line after `interrupt`. It runs the node
+> again **from its first line**. Everything above the call happens twice.
 
 ```python
 def bad(state):
@@ -177,8 +256,8 @@ def bad(state):
 ```
 
 The semantics are at-least-once per node, and LangGraph is no different. The fix
-is not in the engine, it is in where you put side effects: below the
-`interrupt`, or in a node of their own. There is a test pinning this behaviour
+is not in the engine, it is in where you put side effects: **below the
+`interrupt`, or in a node of their own.** There is a test pinning this behaviour
 so nobody "fixes" it by accident.
 
 The same trap arrives through the front door as a double click, so `resume`
@@ -188,6 +267,8 @@ refuses a thread that is not paused:
 $ python -m demo.cli resume f3a1 approved
 ERROR: thread f3a1 is not paused
 ```
+
+---
 
 ## If you know LangGraph
 
@@ -204,6 +285,8 @@ This is the same shape, with the same names, small enough to read in one sitting
 | pause | `interrupt()` | `interrupt()` |
 | resume | `resume(thread_id, answer)` | `Command(resume=...)` |
 | step ceiling | counter in the loop | `recursion_limit` |
+
+---
 
 ## Calling a model
 
@@ -223,12 +306,13 @@ def assess(state: dict) -> dict:
 
 Nothing in `agentgraph/` changes. That is the point of the boundary.
 
+---
+
 ## What this is not
 
-- No `async`, no parallel nodes, no subgraphs, no event streaming, no retries.
-- One process at a time per thread: there is no lock, so two concurrent
-  `resume` calls on the same thread are not defended against.
-- The approval screen has no login and no per-user limits. It runs on
-  `localhost` and it is a demonstration.
-- Not a LangGraph replacement. It is the part of LangGraph that explains the
-  rest, written out by hand.
+| Not here | Detail |
+|---|---|
+| Concurrency | No `async`, no parallel nodes, no subgraphs, no event streaming, no retries |
+| Locking | One process at a time per thread. Two concurrent `resume` calls on the same thread are not defended against |
+| Auth | The approval screen has no login and no per-user limits. It runs on `localhost` and it is a demonstration |
+| A LangGraph replacement | It is the part of LangGraph that explains the rest, written out by hand |
