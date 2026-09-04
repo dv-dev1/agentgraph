@@ -51,6 +51,26 @@ $ python -m demo.cli run --application A-2001
 [disburse]          credit of R$ 3.000,00 released
 ```
 
+## The approval screen
+
+The terminal is not where an approval lives. Same state, same `resume`, with a
+page in front of it:
+
+```
+$ python -m demo.cli run --application A-1042
+$ python -m demo.inbox
+approvals on http://127.0.0.1:8000
+```
+
+Every thread the engine paused shows up with the four things needed to decide —
+the amount, the score and verified income, what the agent found, and its
+recommendation — and two buttons. Approving calls
+`resume(thread_id, "approved")`, exactly what the CLI calls.
+
+It answers with `303 See Other` rather than a page, so reloading in the browser
+cannot approve twice. Served by `http.server`, HTML built in Python: no
+framework, no build step, no JavaScript.
+
 ## Run it
 
 Python 3.9 or newer. There is nothing to install.
