@@ -2,22 +2,9 @@
 proves it across objects; this is the claim the README actually makes.
 """
 
-import subprocess
-import sys
-
 import pytest
 
-ROOT = __file__.rsplit("/tests/", 1)[0]
-
-
-def cli(workdir, *args):
-    return subprocess.run(
-        [sys.executable, "-m", "demo.cli", *args],
-        cwd=workdir,
-        env={"PYTHONPATH": ROOT, "PATH": "/usr/bin:/bin"},
-        capture_output=True,
-        text=True,
-    )
+from .conftest import cli
 
 
 @pytest.fixture

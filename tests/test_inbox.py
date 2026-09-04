@@ -3,16 +3,13 @@ a real server, because the 303 is the part that stops a double approval.
 """
 
 import http.client
-import socket
-import subprocess
-import sys
-import time
 
 import pytest
 
 from demo import inbox
 
-ROOT = __file__.rsplit("/tests/", 1)[0]
+from .conftest import cli
+
 
 ROW = {
     "thread_id": "f3a1",
@@ -44,39 +41,6 @@ def test_the_card_offers_both_answers():
     assert 'value="denied"' in html
 
 
-def free_port():
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        return probe.getsockname()[1]
-
-
-@pytest.fixture
-def server(tmp_path):
-    env = {"PYTHONPATH": ROOT, "PATH": "/usr/bin:/bin"}
-    subprocess.run(
-        [sys.executable, "-m", "demo.cli", "run", "--application", "A-1042",
-         "--thread", "f3a1"],
-        cwd=str(tmp_path), env=env, capture_output=True,
-    )
-    port = free_port()
-    process = subprocess.Popen(
-        [sys.executable, "-m", "demo.inbox", "--port", str(port)],
-        cwd=str(tmp_path), env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    for _ in range(100):
-        try:
-            with socket.create_connection(("127.0.0.1", port), timeout=0.1):
-                break
-        except OSError:
-            time.sleep(0.05)
-    else:
-        process.kill()
-        pytest.fail("the inbox never came up")
-
-    yield port, str(tmp_path), env
-    process.kill()
-
-
 def get(port, path="/"):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
     conn.request("GET", path)
@@ -97,7 +61,7 @@ def approve(port, thread, answer="approved"):
 
 
 def test_the_page_lists_what_the_engine_paused(server):
-    port, _, _ = server
+    port, _ = server
     status, body = get(port)
     assert status == 200
     assert "A-1042" in body
@@ -105,34 +69,27 @@ def test_the_page_lists_what_the_engine_paused(server):
 
 
 def test_approving_redirects_and_finishes_the_thread(server):
-    port, workdir, env = server
+    port, workdir = server
     assert approve(port, "f3a1") == 303
 
-    done = subprocess.run(
-        [sys.executable, "-m", "demo.cli", "status", "f3a1"],
-        cwd=workdir, env=env, capture_output=True, text=True,
-    )
+    done = cli(workdir, "status", "f3a1")
     assert "DONE" in done.stdout
     assert "released" in done.stdout
 
 
 def test_the_page_empties_after_the_approval(server):
-    port, _, _ = server
+    port, _ = server
     approve(port, "f3a1")
     assert "Nothing is waiting" in get(port)[1]
 
 
 def test_approving_the_same_thread_twice_is_refused(server):
-    port, _, _ = server
+    port, _ = server
     approve(port, "f3a1")
     assert approve(port, "f3a1") == 409
 
 
 def test_denying_closes_the_thread_without_releasing(server):
-    port, workdir, env = server
+    port, workdir = server
     assert approve(port, "f3a1", "denied") == 303
-    done = subprocess.run(
-        [sys.executable, "-m", "demo.cli", "status", "f3a1"],
-        cwd=workdir, env=env, capture_output=True, text=True,
-    )
-    assert "released" not in done.stdout
+    assert "released" not in cli(workdir, "status", "f3a1").stdout
