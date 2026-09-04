@@ -62,18 +62,31 @@ $ python -m demo.inbox
 approvals on http://127.0.0.1:8000
 ```
 
-Every thread the engine paused shows up with the four things needed to decide —
-the amount, the score and verified income, what the agent found, and its
-recommendation — and two buttons. Approving calls
+![The approval inbox with one pending credit application](docs/inbox-pending.png)
+
+Every thread the engine paused shows up with what it takes to decide and nothing
+else: the amount, the score and verified income, the assessment the agent
+reached, and its recommendation. Only the conclusion, not the whole trail —
+`assess` also produced "income not verified" on its first pass, and showing that
+next to the verified figure would slow the reader down instead of helping. Approving calls
 `resume(thread_id, "approved")`, exactly what the CLI calls.
 
 It answers with `303 See Other` rather than a page, so reloading in the browser
 cannot approve twice. Served by `http.server`, HTML built in Python: no
 framework, no build step, no JavaScript.
 
+![The inbox after the approval, with nothing left waiting](docs/inbox-empty.png)
+
+The engine has finished the thread by the time the page comes back:
+
+```
+$ python -m demo.cli status f3a1
+DONE       released
+```
+
 ## Run it
 
-Python 3.9 or newer. There is nothing to install.
+Python 3.9 or newer. Nothing to install to run it.
 
 ```
 git clone https://github.com/dv-dev1/agentgraph && cd agentgraph
@@ -81,8 +94,17 @@ python -m demo.cli run --application A-1042
 python -m pytest -q
 ```
 
-The test suite needs no API key, no network and no account. `agentgraph/`
-imports only `sqlite3`, `json`, `contextvars`, `datetime` and `typing`:
+The test suite needs no API key, no network and no account. Four of the tests
+drive the inbox in a real browser and are skipped unless Playwright is present:
+
+```
+pip install -r requirements-dev.txt && playwright install chromium
+```
+
+They are what proves the button submits, not just that the endpoint answers.
+
+The engine itself stays clean. `agentgraph/` imports only `sqlite3`, `json`,
+`contextvars`, `datetime` and `typing`:
 
 ```
 grep -rn "^import \|^from " agentgraph/ \
@@ -93,7 +115,7 @@ That prints nothing.
 
 ## How it works
 
-Four files, 335 lines counting docstrings.
+Four files, 279 lines counting docstrings.
 
 | File | What lives in it |
 |---|---|

@@ -47,7 +47,7 @@ CARD = """<div class="card">
     <dt>application</dt><dd>{application}</dd>
     <dt>score</dt><dd>{score}</dd>
     <dt>verified income</dt><dd>{income}</dd>
-    <dt>found</dt><dd>{facts}</dd>
+    <dt>assessment</dt><dd>{facts}</dd>
     <dt>recommendation</dt><dd>{recommendation}</dd>
   </dl>
   <form method="post" action="/approve">
@@ -75,7 +75,9 @@ def card(row: dict) -> str:
         application=html.escape(str(state.get("application_id", "?"))),
         score=html.escape(str(customer.get("score", "?"))),
         income=html.escape(credit.brl(customer.get("verified_income", 0.0))),
-        facts=html.escape("; ".join(facts)),
+        # Only the conclusion: the earlier facts are the audit trail, and one of
+        # them ("income not verified") is already contradicted by a later one.
+        facts=html.escape(facts[-1] if facts else "nothing yet"),
         recommendation="approve" if "within policy" in " ".join(facts) else "review",
     )
 
@@ -133,7 +135,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     server = HTTPServer(("127.0.0.1", args.port), Handler)
-    print(f"approvals on http://127.0.0.1:{args.port}")
+    print(f"approvals on http://127.0.0.1:{args.port}", flush=True)
     server.serve_forever()
     return 0
 
