@@ -12,7 +12,10 @@ ENV = {"PYTHONPATH": ROOT, "PATH": "/usr/bin:/bin"}
 def cli(workdir, *args):
     return subprocess.run(
         [sys.executable, "-m", "demo.cli", *args],
-        cwd=workdir, env=ENV, capture_output=True, text=True,
+        cwd=workdir,
+        env=ENV,
+        capture_output=True,
+        text=True,
     )
 
 
@@ -31,7 +34,10 @@ def server(tmp_path):
     port = free_port()
     process = subprocess.Popen(
         [sys.executable, "-m", "demo.inbox", "--port", str(port)],
-        cwd=workdir, env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        cwd=workdir,
+        env=ENV,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     for _ in range(100):
         try:

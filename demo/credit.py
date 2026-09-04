@@ -88,8 +88,7 @@ def assess(state: dict) -> dict:
 def human_approval(state: dict) -> dict:
     """interrupt() is the first line on purpose: a resume re-runs this node."""
     answer = interrupt(
-        f"approve credit of {brl(state['amount'])}"
-        f" for customer {state['application']['customer']}?"
+        f"approve credit of {brl(state['amount'])} for customer {state['application']['customer']}?"
     )
     say("human_approval", f"answer: {answer}")
     return {"approved": answer == "approved", "facts": [f"human said {answer}"]}

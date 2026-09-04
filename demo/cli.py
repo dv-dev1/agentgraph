@@ -6,7 +6,7 @@ import argparse
 import sys
 import uuid
 
-from agentgraph import Checkpointer, NotPaused
+from agentgraph import Checkpointer, NotPausedError
 
 from . import credit
 
@@ -28,7 +28,7 @@ def cmd_resume(args) -> int:
     graph = credit.build(Checkpointer(DB))
     try:
         graph.resume(args.thread, args.answer)
-    except NotPaused:
+    except NotPausedError:
         print(f"ERROR: thread {args.thread} is not paused", file=sys.stderr)
         return 1
     except ValueError as unknown:

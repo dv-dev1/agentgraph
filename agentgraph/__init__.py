@@ -4,17 +4,17 @@ No dependencies. Run it, kill the process, resume it.
 """
 
 from .checkpoint import Checkpointer
-from .graph import END, START, Graph, NotPaused, RecursionLimit
-from .interrupt import Interrupted, interrupt
+from .graph import END, START, Graph, GraphRecursionError, NotPausedError
+from .interrupt import GraphInterrupt, interrupt
 from .state import add, merge, replace
 
 __all__ = [
     "Checkpointer",
     "END",
     "Graph",
-    "Interrupted",
-    "NotPaused",
-    "RecursionLimit",
+    "GraphInterrupt",
+    "NotPausedError",
+    "GraphRecursionError",
     "START",
     "add",
     "interrupt",

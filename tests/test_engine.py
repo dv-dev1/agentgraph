@@ -9,8 +9,8 @@ from agentgraph import (
     START,
     Checkpointer,
     Graph,
-    NotPaused,
-    RecursionLimit,
+    GraphRecursionError,
+    NotPausedError,
     add,
     interrupt,
     merge,
@@ -147,7 +147,7 @@ def test_a_cycle_without_an_exit_hits_the_ceiling(tmp_path):
     graph.add_edge(START, "spin")
     graph.add_edge("spin", "spin")
     graph.compile(checkpointer(tmp_path))
-    with pytest.raises(RecursionLimit, match="exceeded 25 steps"):
+    with pytest.raises(GraphRecursionError, match="exceeded 25 steps"):
         graph.invoke({"facts": []}, "t1")
 
 
@@ -159,7 +159,7 @@ def test_the_ceiling_is_checked_before_running_the_node(tmp_path):
     graph.add_edge(START, "spin")
     graph.add_edge("spin", "spin")
     graph.compile(checkpointer(tmp_path))
-    with pytest.raises(RecursionLimit):
+    with pytest.raises(GraphRecursionError):
         graph.invoke({}, "t1")
     assert len(runs) == 3
 
@@ -232,7 +232,7 @@ def test_resume_on_a_thread_that_is_not_paused_raises(tmp_path):
     graph = approving_graph(store)
     graph.invoke({"facts": []}, "t1")
     graph.resume("t1", "approved")
-    with pytest.raises(NotPaused, match="not paused"):
+    with pytest.raises(NotPausedError, match="not paused"):
         graph.resume("t1", "approved")
 
 

@@ -4,12 +4,9 @@ a real server, because the 303 is the part that stops a double approval.
 
 import http.client
 
-import pytest
-
 from demo import inbox
 
 from .conftest import cli
-
 
 ROW = {
     "thread_id": "f3a1",
@@ -51,7 +48,8 @@ def get(port, path="/"):
 def approve(port, thread, answer="approved"):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
     conn.request(
-        "POST", "/approve",
+        "POST",
+        "/approve",
         body=f"thread={thread}&answer={answer}",
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )

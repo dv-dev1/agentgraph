@@ -10,7 +10,7 @@ MISSING = object()
 _answer = contextvars.ContextVar("agentgraph_resume_answer", default=MISSING)
 
 
-class Interrupted(Exception):
+class GraphInterrupt(Exception):  # noqa: N818 -- LangGraph calls it exactly this
     def __init__(self, payload):
         super().__init__(payload)
         self.payload = payload
@@ -24,7 +24,7 @@ def interrupt(payload):
     """
     answer = _answer.get()
     if answer is MISSING:
-        raise Interrupted(payload)
+        raise GraphInterrupt(payload)
     return answer
 
 

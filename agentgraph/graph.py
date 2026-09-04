@@ -1,18 +1,18 @@
 """The engine: assemble the graph, run the loop, save every step."""
 
 from .checkpoint import Checkpointer
-from .interrupt import MISSING, Interrupted, supply, withdraw
+from .interrupt import MISSING, GraphInterrupt, supply, withdraw
 from .state import merge
 
 START = "__start__"
 END = "__end__"
 
 
-class RecursionLimit(RuntimeError):
+class GraphRecursionError(RuntimeError):
     """The graph went past its step ceiling. Almost always a cycle with no exit."""
 
 
-class NotPaused(RuntimeError):
+class NotPausedError(RuntimeError):
     """The guard against a double click: answering twice would run the node twice."""
 
 
@@ -21,8 +21,8 @@ class Graph:
         self.schema = schema
         self.limit = limit
         self.nodes: dict = {}
-        self.edges: dict = {}        # source -> fixed target
-        self.routers: dict = {}      # source -> (state) -> target name
+        self.edges: dict = {}  # source -> fixed target
+        self.routers: dict = {}  # source -> (state) -> target name
         self.checkpointer = None
         self._compiled = False
 
@@ -90,10 +90,10 @@ class Graph:
     def _run(self, state: dict, thread_id: str, node: str, step: int, answer=MISSING) -> dict:
         while node != END:
             if step >= self.limit:
-                raise RecursionLimit(f"exceeded {self.limit} steps")
+                raise GraphRecursionError(f"exceeded {self.limit} steps")
             try:
                 delta = self._call(node, state, answer)
-            except Interrupted as pause:
+            except GraphInterrupt as pause:
                 # Save the state as it was *before* the node ran, and the node
                 # itself as next_node: resuming re-runs it from its first line.
                 self.checkpointer.save(thread_id, step, state, node, pause.payload)
@@ -124,5 +124,5 @@ class Graph:
         if row is None:
             raise ValueError(f"unknown thread {thread_id!r}")
         if row["interrupt"] is None:
-            raise NotPaused(f"thread {thread_id} is not paused")
+            raise NotPausedError(f"thread {thread_id} is not paused")
         return self._run(row["state"], thread_id, row["next_node"], row["step"], answer)

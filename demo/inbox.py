@@ -7,7 +7,7 @@ import html
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from agentgraph import Checkpointer, NotPaused
+from agentgraph import Checkpointer, NotPausedError
 
 from . import credit
 
@@ -117,7 +117,7 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             credit.build(Checkpointer(DB)).resume(thread, answer)
-        except (NotPaused, ValueError) as refused:
+        except (NotPausedError, ValueError) as refused:
             return self._send(409, f"<p>{html.escape(str(refused))}</p>")
 
         # 303 and not 200: reloading the page must not approve a second time.
