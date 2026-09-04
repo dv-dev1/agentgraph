@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.db
+.venv/
+
+# planning notes, not part of the published project
+specs/
