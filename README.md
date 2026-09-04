@@ -1,5 +1,7 @@
 # agentgraph
 
+[![CI](https://github.com/dv-dev1/agentgraph/actions/workflows/ci.yml/badge.svg)](https://github.com/dv-dev1/agentgraph/actions/workflows/ci.yml)
+
 A small agent graph engine with checkpointing and human-in-the-loop.
 No dependencies. Run it, kill the process, resume it.
 
@@ -86,22 +88,25 @@ DONE       released
 
 ## Run it
 
-Python 3.9 or newer. Nothing to install to run it.
+Python 3.9 or newer.
 
 ```
 git clone https://github.com/dv-dev1/agentgraph && cd agentgraph
+pip install -e ".[dev]"
 python -m demo.cli run --application A-1042
-python -m pytest -q
+pytest -q
 ```
+
+The install is only for the package metadata and pytest; the engine itself pulls
+in nothing.
 
 The test suite needs no API key, no network and no account. Four of the tests
-drive the inbox in a real browser and are skipped unless Playwright is present:
+drive the inbox in a real browser, proving the button submits and not just that
+the endpoint answers. They are skipped unless Playwright is installed:
 
 ```
-pip install -r requirements-dev.txt && playwright install chromium
+pip install -e ".[browser]" && playwright install chromium
 ```
-
-They are what proves the button submits, not just that the endpoint answers.
 
 The engine itself stays clean. `agentgraph/` imports only `sqlite3`, `json`,
 `contextvars`, `datetime` and `typing`:
@@ -138,8 +143,8 @@ It returns **only what changed**, and a schema says how each field is joined:
 
 ```python
 SCHEMA = {
-    "facts":  add,       # old list + new list
-    "amount": replace,   # the new value wins
+    "facts": add,  # old list + new list
+    "amount": replace,  # the new value wins
 }
 ```
 
@@ -166,7 +171,7 @@ again **from its first line**. Everything above the call happens twice.
 
 ```python
 def bad(state):
-    send_email(state)                 # sent twice
+    send_email(state)  # sent twice
     answer = interrupt("proceed?")
     ...
 ```
@@ -208,8 +213,11 @@ node like any other:
 
 ```python
 def assess(state: dict) -> dict:
-    reply = client.messages.create(model="claude-sonnet-5", max_tokens=256,
-                                   messages=[{"role": "user", "content": prompt(state)}])
+    reply = client.messages.create(
+        model="claude-sonnet-5",
+        max_tokens=256,
+        messages=[{"role": "user", "content": prompt(state)}],
+    )
     return {"facts": [reply.content[0].text]}
 ```
 
