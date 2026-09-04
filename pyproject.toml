@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentgraph"
+version = "0.1.0"
+description = "A small agent graph engine with checkpointing and human-in-the-loop. No dependencies."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "Daniel Vieira de Macedo Gomes" }]
+keywords = ["agent", "graph", "checkpoint", "human-in-the-loop", "langgraph", "workflow"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/dv-dev1/agentgraph"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+browser = ["playwright>=1.40"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["agentgraph"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM"]

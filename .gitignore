@@ -6,3 +6,7 @@ __pycache__/
 
 # planning notes, not part of the published project
 specs/
+
+.ruff_cache/
+*.egg-info/
+dist/
