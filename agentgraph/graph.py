@@ -49,26 +49,33 @@ class Graph:
 
     def compile(self, checkpointer=None):
         """Freeze the graph and reject what would only fail halfway through a run."""
+        self._require_an_entry_point()
+        self._require_edges_between_real_nodes()
+        self._require_every_node_to_have_a_way_out()
+
+        self.checkpointer = checkpointer or Checkpointer()
+        self._compiled = True
+        return self
+
+    def _require_an_entry_point(self):
         if START not in self.edges:
             raise ValueError("missing add_edge(START, ...): nothing says where to begin")
 
-        known = set(self.nodes) | {END}
+    def _require_edges_between_real_nodes(self):
+        reachable = set(self.nodes) | {END}
         for source, target in self.edges.items():
             if source != START and source not in self.nodes:
                 raise ValueError(f"edge leaves {source!r}, which is not a node")
-            if target not in known:
+            if target not in reachable:
                 raise ValueError(f"edge points at {target!r}, which does not exist")
         for source in self.routers:
             if source not in self.nodes:
                 raise ValueError(f"conditional edge leaves {source!r}, which is not a node")
 
+    def _require_every_node_to_have_a_way_out(self):
         dangling = set(self.nodes) - set(self.edges) - set(self.routers)
         if dangling:
             raise ValueError(f"node with no way out: {sorted(dangling)}")
-
-        self.checkpointer = checkpointer or Checkpointer()
-        self._compiled = True
-        return self
 
     def _next(self, node: str, state: dict) -> str:
         if node in self.routers:
