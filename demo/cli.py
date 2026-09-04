@@ -1,8 +1,5 @@
-"""Three commands, and the first two are deliberately separate.
-
-``run`` starts a thread and exits when a human is needed. ``resume`` is a
-different process answering it. A single command with a --resume flag would
-hide the only thing worth showing.
+"""Three commands. run and resume are separate on purpose: a single command with
+a --resume flag would hide the fact that they are different processes.
 """
 
 import argparse

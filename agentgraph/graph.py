@@ -1,8 +1,4 @@
-"""The engine: assemble the graph, run the loop, save every step.
-
-Two phases, like LangGraph: you assemble the whole graph first, then ``compile``
-freezes and validates it, and only then can it run.
-"""
+"""The engine: assemble the graph, run the loop, save every step."""
 
 from .checkpoint import Checkpointer
 from .interrupt import MISSING, Interrupted, supply, withdraw
@@ -17,11 +13,7 @@ class RecursionLimit(RuntimeError):
 
 
 class NotPaused(RuntimeError):
-    """resume() was called on a thread that is not waiting for anyone.
-
-    This is the guard against a double click: without it, answering twice runs
-    the approved node twice.
-    """
+    """The guard against a double click: answering twice would run the node twice."""
 
 
 class Graph:
@@ -34,10 +26,7 @@ class Graph:
         self.checkpointer = None
         self._compiled = False
 
-    # ---- assembly -------------------------------------------------------
-
     def add_node(self, name: str, fn):
-        """Register a node. A node is a plain function ``(dict) -> dict``."""
         if name in (START, END):
             raise ValueError(f"{name!r} is reserved")
         if name in self.nodes:
@@ -46,21 +35,20 @@ class Graph:
         return self
 
     def add_edge(self, source: str, target: str):
-        """A fixed edge. ``add_edge(START, "first")`` says where execution begins."""
+        """``add_edge(START, "first")`` is what says where execution begins."""
         if source in self.edges or source in self.routers:
             raise ValueError(f"{source!r} already has an outgoing edge")
         self.edges[source] = target
         return self
 
     def add_conditional_edge(self, source: str, router):
-        """An edge whose target is decided at run time by ``router(state)``."""
         if source in self.edges or source in self.routers:
             raise ValueError(f"{source!r} already has an outgoing edge")
         self.routers[source] = router
         return self
 
     def compile(self, checkpointer=None):
-        """Freeze and validate. Every failure here is a failure you get for free."""
+        """Freeze the graph and reject what would only fail halfway through a run."""
         if START not in self.edges:
             raise ValueError("missing add_edge(START, ...): nothing says where to begin")
 
@@ -82,8 +70,6 @@ class Graph:
         self._compiled = True
         return self
 
-    # ---- execution ------------------------------------------------------
-
     def _next(self, node: str, state: dict) -> str:
         if node in self.routers:
             target = self.routers[node](state)
@@ -93,7 +79,6 @@ class Graph:
         return self.edges[node]
 
     def _call(self, node: str, state: dict, answer):
-        """Run one node, with the human's answer in scope if there is one."""
         if answer is MISSING:
             return self.nodes[node](state)
         token = supply(answer)
@@ -103,7 +88,6 @@ class Graph:
             withdraw(token)
 
     def _run(self, state: dict, thread_id: str, node: str, step: int, answer=MISSING) -> dict:
-        """The loop. Shared by invoke and resume, which differ only in where they start."""
         while node != END:
             if step >= self.limit:
                 raise RecursionLimit(f"exceeded {self.limit} steps")
@@ -128,7 +112,6 @@ class Graph:
         return {"status": "done", "thread_id": thread_id, "state": state}
 
     def invoke(self, state: dict, thread_id: str) -> dict:
-        """Run from the start until END or until a node asks for a human."""
         if not self._compiled:
             raise RuntimeError("call compile() before invoke()")
         return self._run(state, thread_id, self.edges[START], 0)

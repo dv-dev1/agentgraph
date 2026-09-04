@@ -1,12 +1,6 @@
-"""A credit desk agent, written against the engine and nothing else.
+"""A credit desk agent: releases up to a limit on its own, asks a human above it.
 
-The bank releases credit on its own up to a limit. Above it, the graph stops
-and waits for a human. Every node is a plain ``(dict) -> dict`` function: none
-of them knows there is a database, a pause, or a second process.
-
-No model is called here. ``assess`` applies rules, so the whole demo runs with
-no API key. Swapping it for a model call is ten lines and the engine does not
-change -- see the README.
+No model is called. ``assess`` applies rules, so the demo runs with no API key.
 """
 
 import json
@@ -16,9 +10,9 @@ from agentgraph import END, START, Graph, add, interrupt, replace
 
 DATA = Path(__file__).parent / "data"
 
-LIMIT = 5000.0          # above this, a human decides
+LIMIT = 5000.0
 MIN_SCORE = 600
-MAX_DEBT_RATIO = 0.30   # instalment over verified monthly income
+MAX_DEBT_RATIO = 0.30  # instalment over verified monthly income
 
 SCHEMA = {
     "application_id": replace,
@@ -35,7 +29,7 @@ def _load(name: str) -> dict:
     return json.loads((DATA / name).read_text())
 
 
-def _brl(value: float) -> str:
+def brl(value: float) -> str:
     whole, cents = f"{value:,.2f}".split(".")
     return f"R$ {whole.replace(',', '.')},{cents}"
 
@@ -44,14 +38,11 @@ def say(node: str, message: str) -> None:
     print(f"[{node}]".ljust(20) + message)
 
 
-# ---- nodes ---------------------------------------------------------------
-
-
 def fetch_application(state: dict) -> dict:
     application = _load("applications.json")[state["application_id"]]
     say(
         "fetch_application",
-        f"proposal {state['application_id']}, {_brl(application['value'])}"
+        f"proposal {state['application_id']}, {brl(application['value'])}"
         f" over {application['months']} months",
     )
     return {"application": application}
@@ -59,22 +50,20 @@ def fetch_application(state: dict) -> dict:
 
 def score(state: dict) -> dict:
     customer = _load("bureau.json")[state["application"]["customer"]]
-    say("score", f"score {customer['score']}, declared income {_brl(customer['declared_income'])}")
+    say("score", f"score {customer['score']}, declared income {brl(customer['declared_income'])}")
     return {"customer": customer, "facts": [f"credit score {customer['score']}"]}
 
 
 def fetch_income(state: dict) -> dict:
-    """Reached only when assess asks for it. This is what closes the cycle."""
     verified = _load("payroll.json")[state["application"]["customer"]]
-    say("fetch_income", f"verified income {_brl(verified)}")
+    say("fetch_income", f"verified income {brl(verified)}")
     return {
         "customer": {**state["customer"], "verified_income": verified},
-        "facts": [f"verified income {_brl(verified)}"],
+        "facts": [f"verified income {brl(verified)}"],
     }
 
 
 def assess(state: dict) -> dict:
-    """Apply the policy, or say what is still missing and let the router loop."""
     customer = state["customer"]
     if "verified_income" not in customer:
         say("assess", "income not verified yet")
@@ -99,7 +88,7 @@ def assess(state: dict) -> dict:
 def human_approval(state: dict) -> dict:
     """interrupt() is the first line on purpose: a resume re-runs this node."""
     answer = interrupt(
-        f"approve credit of {_brl(state['amount'])}"
+        f"approve credit of {brl(state['amount'])}"
         f" for customer {state['application']['customer']}?"
     )
     say("human_approval", f"answer: {answer}")
@@ -107,15 +96,12 @@ def human_approval(state: dict) -> dict:
 
 
 def disburse(state: dict) -> dict:
-    say("disburse", f"credit of {_brl(state['amount'])} released")
+    say("disburse", f"credit of {brl(state['amount'])} released")
     return {"outcome": "released"}
 
 
-# ---- routing -------------------------------------------------------------
-
-
 def route_after_assess(state: dict) -> str:
-    """One conditional edge, three destinations. The loop lives on the first."""
+    """One conditional edge, three destinations. The cycle is the first."""
     if "verified_income" not in state["customer"]:
         return "fetch_income"
     if state["amount"] <= 0:

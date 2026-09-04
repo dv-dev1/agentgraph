@@ -1,7 +1,5 @@
-"""Engine tests. No API key, no network, no fixtures beyond pytest's tmp_path.
-
-Every test uses a real file on disk. An in-memory database would pass these
-tests and destroy the only thing this project proves.
+"""Engine tests. Every one writes to a real file: an in-memory database would
+pass and destroy the only thing this project proves.
 """
 
 import pytest
@@ -26,9 +24,6 @@ def checkpointer(tmp_path):
     return Checkpointer(str(tmp_path / "test.db"))
 
 
-# ---- state ---------------------------------------------------------------
-
-
 def test_absent_field_survives_the_merge():
     state = {"facts": ["a"], "value": 10}
     assert merge(state, {"value": 20}, SCHEMA) == {"facts": ["a"], "value": 20}
@@ -49,9 +44,6 @@ def test_merge_does_not_mutate_the_original_state():
     state = {"facts": ["a"]}
     merge(state, {"facts": ["b"]}, SCHEMA)
     assert state == {"facts": ["a"]}
-
-
-# ---- assembly ------------------------------------------------------------
 
 
 def test_compile_rejects_an_edge_to_an_unknown_node():
@@ -86,9 +78,6 @@ def test_invoke_before_compile_raises(tmp_path):
     graph.add_edge("one", END)
     with pytest.raises(RuntimeError, match="compile"):
         graph.invoke({}, "t1")
-
-
-# ---- execution -----------------------------------------------------------
 
 
 def linear_graph(tmp_path):
@@ -173,9 +162,6 @@ def test_the_ceiling_is_checked_before_running_the_node(tmp_path):
     with pytest.raises(RecursionLimit):
         graph.invoke({}, "t1")
     assert len(runs) == 3
-
-
-# ---- pause and resume ----------------------------------------------------
 
 
 def approving_graph(store, log=None, ask_again=False):
@@ -273,9 +259,6 @@ def test_the_answer_does_not_leak_into_the_next_node(tmp_path):
     result = graph.resume("t1", "approved")
     assert result["status"] == "paused"
     assert result["interrupt"] == "and again?"
-
-
-# ---- checkpointer --------------------------------------------------------
 
 
 def test_load_latest_returns_the_highest_step(tmp_path):

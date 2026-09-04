@@ -1,9 +1,4 @@
-"""Durable state: one row per step, in SQLite.
-
-One row per step rather than one per thread costs the same amount of code and
-buys two things: resuming from any point, and an audit trail of where the agent
-walked. This is what LangGraph's ``SqliteSaver`` does.
-"""
+"""Durable state: one row per step, in SQLite."""
 
 import json
 import sqlite3
@@ -34,8 +29,6 @@ def _decode(row: sqlite3.Row) -> dict:
 
 
 class Checkpointer:
-    """Reads and writes checkpoints. Holds no execution state of its own."""
-
     def __init__(self, path: str = "agentgraph.db"):
         self.path = path
         self.conn = sqlite3.connect(path)
@@ -44,11 +37,8 @@ class Checkpointer:
         self.conn.commit()
 
     def save(self, thread_id, step, state, next_node, interrupt=None) -> None:
-        """Write one step.
-
-        INSERT OR REPLACE, not INSERT: resuming re-runs the interrupted node,
-        which rewrites that step's row rather than adding a second one.
-        """
+        # INSERT OR REPLACE, not INSERT: resuming re-runs the interrupted node,
+        # which rewrites that step's row rather than adding a second one.
         self.conn.execute(
             "INSERT OR REPLACE INTO checkpoints"
             " (thread_id, step, state, next_node, interrupt, created_at)"
@@ -65,7 +55,6 @@ class Checkpointer:
         self.conn.commit()
 
     def load_latest(self, thread_id: str):
-        """The most recent step of a thread, or None if the thread is unknown."""
         row = self.conn.execute(
             "SELECT * FROM checkpoints WHERE thread_id = ? ORDER BY step DESC LIMIT 1",
             (thread_id,),
@@ -73,11 +62,8 @@ class Checkpointer:
         return None if row is None else _decode(row)
 
     def list_paused(self) -> list:
-        """Every thread whose *latest* step is waiting on a human.
-
-        The subquery matters: a thread that paused and then resumed still has an
-        old row with an interrupt in it, and must not show up here.
-        """
+        # The subquery matters: a thread that paused and then resumed still has
+        # an old row with an interrupt in it, and must not show up here.
         rows = self.conn.execute(
             "SELECT * FROM checkpoints AS c"
             " WHERE c.interrupt IS NOT NULL"

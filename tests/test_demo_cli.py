@@ -1,7 +1,5 @@
-"""The kill test, for real: separate operating system processes.
-
-test_engine.py proves resuming works across objects. This proves it across
-processes, which is the claim the README makes.
+"""The kill test across separate operating system processes. test_engine.py
+proves it across objects; this is the claim the README actually makes.
 """
 
 import subprocess
